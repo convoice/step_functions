@@ -1,5 +1,5 @@
 {
-  "Comment": "A description of my state machine",
+  "Comment": "Step function that connects to API Gateway websockets",
   "StartAt": "DynamoDB GetItem",
   "States": {
     "DynamoDB GetItem": {
