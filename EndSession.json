@@ -1,5 +1,5 @@
 {
-  "Comment": "A description of my state machine",
+  "Comment": "Express step function to close SessionManager and cleanup",
   "StartAt": "DynamoDB GetItem",
   "States": {
     "DynamoDB GetItem": {
