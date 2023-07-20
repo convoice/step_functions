@@ -1,0 +1,146 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Recieve Input and Block 1",
+  "States": {
+    "Recieve Input and Block 1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem.waitForTaskToken",
+      "Parameters": {
+        "TableName": "Sessions",
+        "Item": {
+          "ConnectionID": {
+            "S.$": "$.connectionID"
+          },
+          "TaskToken": {
+            "S.$": "$$.Task.Token"
+          }
+        }
+      },
+      "Next": "Check Disconnect",
+      "ResultPath": "$.input",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "Next": "Clean Up",
+          "ResultPath": "$.error"
+        }
+      ],
+      "TimeoutSeconds": 600
+    },
+    "Check Disconnect": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Not": {
+            "Variable": "$.input.done",
+            "IsPresent": true
+          },
+          "Next": "Lambda Invoke"
+        }
+      ],
+      "Default": "Clean Up"
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:801774717139:function:sse_query_generation_ingestion:$LATEST",
+        "Payload": {
+          "messages.$": "$.input",
+          "connectionID.$": "$.connectionID"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "Add LLM Output",
+      "ResultPath": "$.result",
+      "ResultSelector": {
+        "payload.$": "$.Payload"
+      }
+    },
+    "Add LLM Output": {
+      "Type": "Pass",
+      "Next": "Recieve Input and Block 2",
+      "Parameters": {
+        "connectionID.$": "$.connectionID",
+        "startTime.$": "$.startTime",
+        "output.$": "States.JsonMerge($.input, $.result.payload, false)"
+      }
+    },
+    "Recieve Input and Block 2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem.waitForTaskToken",
+      "Parameters": {
+        "TableName": "Sessions",
+        "Item": {
+          "ConnectionID": {
+            "S.$": "$.connectionID"
+          },
+          "TaskToken": {
+            "S.$": "$$.Task.Token"
+          }
+        }
+      },
+      "Next": "Add User Input",
+      "ResultPath": "$.newmessage",
+      "TimeoutSeconds": 600,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.Timeout"
+          ],
+          "Next": "Clean Up",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "Add User Input": {
+      "Type": "Pass",
+      "Next": "Check Disconnect 2",
+      "Parameters": {
+        "connectionID.$": "$.connectionID",
+        "startTime.$": "$.startTime",
+        "input.$": "States.JsonMerge($.output, $.newmessage, false)"
+      }
+    },
+    "Check Disconnect 2": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Not": {
+            "Variable": "$.input.done",
+            "IsPresent": true
+          },
+          "Next": "Lambda Invoke"
+        }
+      ],
+      "Default": "Clean Up"
+    },
+    "Clean Up": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:deleteItem",
+      "Parameters": {
+        "TableName": "Sessions",
+        "Key": {
+          "ConnectionID": {
+            "S.$": "$.connectionID"
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}
