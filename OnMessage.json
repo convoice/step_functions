@@ -1,0 +1,29 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "DynamoDB GetItem",
+  "States": {
+    "DynamoDB GetItem": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": {
+        "TableName": "Sessions",
+        "Key": {
+          "ConnectionID": {
+            "S.$": "$.connectionID"
+          }
+        }
+      },
+      "Next": "SendTaskSuccess",
+      "ResultPath": "$.query"
+    },
+    "SendTaskSuccess": {
+      "Type": "Task",
+      "End": true,
+      "Parameters": {
+        "Output.$": "States.StringToJson(States.Format('\\{\"{}\":\\{\"content\":\"{}\", \"role\":\"user\"\\}\\}', $.message.time, $.message.data.data))",
+        "TaskToken.$": "$.query.Item.TaskToken.S"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:sfn:sendTaskSuccess"
+    }
+  }
+}
